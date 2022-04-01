@@ -1,5 +1,5 @@
 <?php
-// config for Sashalenz/DinstarApi
-return [
 
+return [
+    'url' => env('DINSTAR_API_URL')
 ];
