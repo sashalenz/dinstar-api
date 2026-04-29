@@ -1,50 +1,216 @@
-
-[<img src="https://github-ads.s3.eu-central-1.amazonaws.com/support-ukraine.svg?t=1" />](https://supportukrainenow.org)
-
-# Dinstar New API
+# Dinstar GSM Gateway API for Laravel
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/sashalenz/dinstar-api.svg?style=flat-square)](https://packagist.org/packages/sashalenz/dinstar-api)
-[![GitHub Tests Action Status](https://img.shields.io/github/workflow/status/sashalenz/dinstar-api/run-tests?label=tests)](https://github.com/sashalenz/dinstar-api/actions?query=workflow%3Arun-tests+branch%3Amain)
-[![GitHub Code Style Action Status](https://img.shields.io/github/workflow/status/sashalenz/dinstar-api/Check%20&%20fix%20styling?label=code%20style)](https://github.com/sashalenz/dinstar-api/actions?query=workflow%3A"Check+%26+fix+styling"+branch%3Amain)
 [![Total Downloads](https://img.shields.io/packagist/dt/sashalenz/dinstar-api.svg?style=flat-square)](https://packagist.org/packages/sashalenz/dinstar-api)
 
-This is where your description should go. Limit it to a paragraph or two. Consider adding a small example.
+A Laravel client for the **Dinstar GSM Gateway HTTP API** (the "new API",
+firmware ≥ 1102). Implements every endpoint described in the official
+[`Dinstar GSM Gateway HTTP API`](https://www.dinstar.com/) document
+(v202011): SMS, USSD, port management, CDR, STK, device status, and the
+push-event payloads that the gateway can send back to your application.
 
-## Support us
+## Requirements
 
-[<img src="https://github-ads.s3.eu-central-1.amazonaws.com/dinstar-api.jpg?t=1" width="419px" />](https://spatie.be/github-ad-click/dinstar-api)
-
-We invest a lot of resources into creating [best in class open source packages](https://spatie.be/open-source). You can support us by [buying one of our paid products](https://spatie.be/open-source/support-us).
-
-We highly appreciate you sending us a postcard from your hometown, mentioning which of our package(s) you are using. You'll find our address on [our contact page](https://spatie.be/about-us). We publish all received postcards on [our virtual postcard wall](https://spatie.be/open-source/postcards).
+| Package | Version |
+| --- | --- |
+| PHP | `^8.3 \| ^8.4 \| ^8.5` |
+| Laravel | `^11.0 \| ^12.0 \| ^13.0` |
 
 ## Installation
-
-You can install the package via composer:
 
 ```bash
 composer require sashalenz/dinstar-api
 ```
 
-You can publish the config file with:
+Publish the configuration file:
 
 ```bash
 php artisan vendor:publish --tag="dinstar-api-config"
 ```
 
-This is the contents of the published config file:
+Then add the gateway credentials to your `.env`:
 
-```php
-return [
-];
+```dotenv
+DINSTAR_API_URL=https://192.168.1.10
+DINSTAR_API_USERNAME=admin
+DINSTAR_API_PASSWORD=admin
+
+# Optional
+DINSTAR_API_TIMEOUT=10
+DINSTAR_API_RETRY_TIMES=3
+DINSTAR_API_RETRY_SLEEP=100
+DINSTAR_API_VERIFY_SSL=false
 ```
+
+Most Dinstar units ship with a self-signed certificate, so `DINSTAR_API_VERIFY_SSL`
+defaults to `false`. Set it to `true` if you have installed a valid certificate.
+
+> Make sure the **new-version API** is enabled on the gateway:
+> *Mobile Configuration → Basic Configuration → API*.
 
 ## Usage
 
+The service is registered as a singleton and is exposed through the
+`DinstarApi` facade and the `Sashalenz\DinstarApi\DinstarApi` class.
+
 ```php
-$dinstarApi = new Sashalenz\DinstarApi();
-echo $dinstarApi->echoPhrase('Hello, Sashalenz!');
+use Sashalenz\DinstarApi\Facades\DinstarApi;
+
+$response = DinstarApi::sendSms('Hello!', [['number' => '+380501234567']]);
+$response->get('task_id'); // 7
 ```
+
+Every method returns an `Illuminate\Support\Collection` containing the raw
+JSON response from the gateway. Gateway-side errors raise
+`Sashalenz\DinstarApi\Exceptions\DinstarException`.
+
+### Talking to multiple gateways
+
+```php
+DinstarApi::for('https://10.0.0.5', 'admin', 'secret')
+    ->sendSms('Hi', [['number' => '+380501234567']]);
+```
+
+---
+
+## API reference
+
+### SMS
+
+```php
+use Sashalenz\DinstarApi\Enums\SmsEncoding;
+
+DinstarApi::sendSms(
+    text: '#param#',
+    recipients: [
+        ['number' => '+380501234567', 'text_param' => ['Bob'], 'user_id' => 1],
+        ['number' => '+380939876543', 'text_param' => ['Alice'], 'user_id' => 2],
+    ],
+    ports: [2, 3],                 // optional
+    encoding: SmsEncoding::UNICODE, // or SmsEncoding::GSM_7BIT
+    requestStatusReport: true,
+);
+```
+
+Other SMS endpoints:
+
+```php
+DinstarApi::querySmsResult(userIds: [1, 2]);
+DinstarApi::querySmsDeliverStatus(numbers: ['+380501234567']);
+DinstarApi::querySmsInQueue();
+DinstarApi::queryIncomingSms(flag: \Sashalenz\DinstarApi\Enums\IncomingSmsFlag::ALL);
+DinstarApi::stopSms(taskId: 7);
+```
+
+### USSD
+
+```php
+use Sashalenz\DinstarApi\Enums\UssdCommand;
+
+DinstarApi::sendUssd(ports: [1, 2], text: '*125#');
+DinstarApi::sendUssd(ports: [1], text: '', command: UssdCommand::CANCEL);
+DinstarApi::queryUssdReply([1, 2]);
+```
+
+### Port / SIM management
+
+```php
+use Sashalenz\DinstarApi\Enums\PortAction;
+use Sashalenz\DinstarApi\Enums\PortInfoType;
+
+DinstarApi::getPortInfo(
+    infoTypes: [PortInfoType::TYPE, PortInfoType::IMEI, PortInfoType::SIGNAL],
+    ports: [1, 2, 3],
+);
+
+DinstarApi::setPortInfo(port: 1, action: PortAction::POWER, param: 'off');
+DinstarApi::setPortInfo(port: 1, action: PortAction::RESET);
+DinstarApi::setPortInfo(port: 1, action: PortAction::SLOT, param: '2');
+```
+
+### Call forwarding
+
+```php
+use Sashalenz\DinstarApi\Enums\CallForwardType;
+
+DinstarApi::setCallForward(8, CallForwardType::UNCONDITIONAL, '15013828917');
+DinstarApi::checkCallForward(8);
+DinstarApi::getCallForward(8);
+```
+
+### CDR
+
+```php
+DinstarApi::getCdr(
+    ports: [2, 3],
+    timeAfter: '2024-01-01 00:00:00',
+    timeBefore: now(),
+);
+```
+
+### STK
+
+```php
+use Sashalenz\DinstarApi\Enums\StkAction;
+
+DinstarApi::getStkView(0);
+DinstarApi::stkGo(port: 7, item: 1);
+DinstarApi::stkGo(port: 7, action: StkAction::CANCEL);
+DinstarApi::getStkCurrFrameIndex(0);
+```
+
+### Device status
+
+```php
+DinstarApi::getStatus(); // ['performance']
+```
+
+---
+
+## Push events
+
+The gateway can be configured to push events (incoming SMS, sending results,
+delivery receipts, USSD replies, register status, CDR, device events,
+exceptions) to your application. Use `PushEvent` to parse them in a single
+controller:
+
+```php
+use Sashalenz\DinstarApi\PushEvent;
+
+Route::post('/dinstar/push', function (Request $request) {
+    $event = PushEvent::fromPayload($request->getContent());
+
+    match (true) {
+        $event->isIncomingSms()    => IncomingSms::ingest($event->sn, $event->data),
+        $event->isSmsResult()      => SmsResult::ingest($event->sn, $event->data),
+        $event->isDeliverStatus()  => DeliverStatus::ingest($event->sn, $event->data),
+        $event->isCdr()            => Cdr::ingest($event->sn, $event->data),
+        default                    => null,
+    };
+
+    return response()->noContent();
+});
+```
+
+---
+
+## Error handling
+
+```php
+use Sashalenz\DinstarApi\Exceptions\DinstarException;
+
+try {
+    DinstarApi::sendSms('Hi', [['number' => '+380501234567']]);
+} catch (DinstarException $e) {
+    // $e->getCode()    -> the gateway error_code (550, 413, 500, …)
+    // $e->endpoint     -> the API path that failed
+    // $e->payload      -> the full decoded response (when available)
+}
+```
+
+The package recognises the documented error codes (`200`, `202`, `400`,
+`404`, `413`, `500`, `550`) and includes a human-readable description in
+the exception message.
 
 ## Testing
 
@@ -52,23 +218,24 @@ echo $dinstarApi->echoPhrase('Hello, Sashalenz!');
 composer test
 ```
 
+The test suite uses [Pest](https://pestphp.com/) and Laravel's
+`Http::fake()` to stub gateway responses, so it runs without any network
+access.
+
+## Code style
+
+```bash
+composer format
+```
+
 ## Changelog
 
-Please see [CHANGELOG](CHANGELOG.md) for more information on what has changed recently.
-
-## Contributing
-
-Please see [CONTRIBUTING](https://github.com/spatie/.github/blob/main/CONTRIBUTING.md) for details.
-
-## Security Vulnerabilities
-
-Please review [our security policy](../../security/policy) on how to report security vulnerabilities.
+See [CHANGELOG](CHANGELOG.md).
 
 ## Credits
 
 - [Oleksandr Petrovskyi](https://github.com/sashalenz)
-- [All Contributors](../../contributors)
 
 ## License
 
-The MIT License (MIT). Please see [License File](LICENSE.md) for more information.
+The MIT License (MIT). See [LICENSE](LICENSE.md).
