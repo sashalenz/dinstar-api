@@ -10,6 +10,9 @@ All notable changes to `dinstar-api` will be documented in this file.
 - Bumped requirements to PHP `^8.2` and Laravel `^11.0 | ^12.0`.
 
 ### Added
+- Laravel notification channel `DinstarSmsChannel` (alias `dinstar-sms`)
+  with a fluent `DinstarSmsMessage` builder so SMS can be sent through
+  the standard `Notification::via()` pipeline.
 - Dedicated methods for every documented API endpoint: `sendSms`,
   `querySmsResult`, `querySmsDeliverStatus`, `querySmsInQueue`,
   `queryIncomingSms`, `stopSms`, `sendUssd`, `queryUssdReply`,

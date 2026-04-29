@@ -167,6 +167,71 @@ DinstarApi::getStatus(); // ['performance']
 
 ---
 
+## Notification channel
+
+The package ships a Laravel notification channel — `DinstarSmsChannel` —
+so you can dispatch SMS through the gateway with the regular notification
+pipeline (queues, events, on-demand notifications, all of it).
+
+Add the channel to your notification's `via()` and implement
+`toDinstarSms()`:
+
+```php
+use Illuminate\Notifications\Notification;
+use Sashalenz\DinstarApi\Notifications\DinstarSmsChannel;
+use Sashalenz\DinstarApi\Notifications\DinstarSmsMessage;
+
+class OrderShipped extends Notification
+{
+    public function via(object $notifiable): array
+    {
+        return [DinstarSmsChannel::class]; // or 'dinstar-sms'
+    }
+
+    public function toDinstarSms(object $notifiable): DinstarSmsMessage
+    {
+        return DinstarSmsMessage::create('Your order has shipped!')
+            ->ports([1, 2])         // optional
+            ->withoutDeliveryReport() // optional
+            ->userId($this->order->id); // optional
+    }
+}
+```
+
+`toDinstarSms()` may also return a plain string for the simplest case:
+
+```php
+public function toDinstarSms(object $notifiable): string
+{
+    return 'Your code is 12345';
+}
+```
+
+Tell Laravel where to route the SMS by adding `routeNotificationForDinstarSms`
+to the notifiable model — return either a string or an array of phone
+numbers:
+
+```php
+class User extends Authenticatable
+{
+    use Notifiable;
+
+    public function routeNotificationForDinstarSms($notification)
+    {
+        return $this->phone;
+    }
+}
+```
+
+On-demand notifications work the same:
+
+```php
+Notification::route('dinstar-sms', '+380501234567')
+    ->notify(new OrderShipped($order));
+```
+
+---
+
 ## Push events
 
 The gateway can be configured to push events (incoming SMS, sending results,

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Sashalenz\DinstarApi;
 
+use Illuminate\Notifications\ChannelManager;
+use Sashalenz\DinstarApi\Notifications\DinstarSmsChannel;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -41,5 +43,12 @@ class DinstarApiServiceProvider extends PackageServiceProvider
         });
 
         $this->app->alias(DinstarApi::class, 'dinstar-api');
+    }
+
+    public function packageBooted(): void
+    {
+        $this->app->afterResolving(ChannelManager::class, function (ChannelManager $manager) {
+            $manager->extend(DinstarSmsChannel::ROUTE, fn ($app) => $app->make(DinstarSmsChannel::class));
+        });
     }
 }
